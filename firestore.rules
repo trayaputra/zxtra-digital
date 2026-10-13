@@ -1,0 +1,308 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function isSelfUserData() {
+      return isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+    }
+
+    function isExistingOwner() {
+      return isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // =========================================================
+    // USERS
+    // =========================================================
+
+    match /users/{uid} {
+
+      allow read: if isOwner(uid) || isAdmin();
+
+      // User hanya boleh membuat profilnya sendiri.
+      // Role selalu dipaksa menjadi user/reseller.
+      allow create: if isOwner(uid)
+        && request.resource.data.role in ["user", "reseller"];
+
+      // User boleh update profil, TAPI tidak boleh:
+      // - mengubah role
+      // - mengubah saldo
+      // - mengambil alih UID
+      //
+      // Admin bebas.
+      allow update: if isAdmin()
+        || (
+          isOwner(uid)
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.id == resource.data.id
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // PUBLIC CATALOG
+    // =========================================================
+
+    match /products/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /panels/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /nokos_products/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================
+    // ADMIN / PRIVATE DATA
+    // =========================================================
+
+    match /bot_scripts/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /reseller_packages/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /apk_mods/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read, write: if isAdmin();
+    }
+// =========================================================
+    // TRANSACTIONS
+    // =========================================================
+
+    match /transactions/{id} {
+
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+        );
+
+      allow create: if isSelfUserData();
+
+      // User tidak boleh mengganti userId.
+      // Field sensitif tetap harus dilindungi di level aplikasi.
+      allow update: if isAdmin()
+        || (
+          isExistingOwner()
+          && request.resource.data.userId == resource.data.userId
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // MANUAL ORDERS
+    // =========================================================
+
+    match /manual_orders/{id} {
+
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+        );
+
+      allow create: if isSelfUserData();
+
+      allow update: if isAdmin()
+        || (
+          isExistingOwner()
+          && request.resource.data.userId == resource.data.userId
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // USER PRODUCT DATA
+    // =========================================================
+
+    match /user_product_data/{id} {
+
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+        );
+
+      allow create: if isAdmin() || isSelfUserData();
+
+      allow update: if isAdmin()
+        || (
+          isExistingOwner()
+          && request.resource.data.userId == resource.data.userId
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // USER PANEL DATA
+    // =========================================================
+
+    match /user_panel_data/{id} {
+
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+        );
+
+      allow create: if isAdmin() || isSelfUserData();
+
+      allow update: if isAdmin()
+        || (
+          isExistingOwner()
+          && request.resource.data.userId == resource.data.userId
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // NOKOS ORDERS
+    // =========================================================
+
+    match /nokos_orders/{id} {
+
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+        );
+
+      allow create: if isSelfUserData();
+
+      allow update: if isAdmin()
+        || (
+          isExistingOwner()
+          && request.resource.data.userId == resource.data.userId
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // NOKOS DEPOSITS
+    // =========================================================
+
+    match /nokos_deposits/{id} {
+
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+        );
+
+      allow create: if (
+        isSelfUserData()
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 10000
+      ) || (
+        isAdmin()
+        && request.resource.data.userId is string
+        && request.resource.data.amount is number
+        && request.resource.data.status == "admin_adjusted"
+        && request.resource.data.type == "admin_adjustment"
+      );
+
+      // User tidak boleh mengubah nominal deposit.
+      // Status pembayaran sebaiknya dikontrol admin/backend.
+      allow update: if isAdmin()
+        || (
+          isExistingOwner()
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.amount == resource.data.amount
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // NOKOS WALLETS
+    // =========================================================
+
+    match /nokos_wallets/{uid} {
+
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create: if isAdmin()
+        || (
+          isOwner(uid)
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.balance == 0
+          && request.resource.data.totalTopup == 0
+          && request.resource.data.totalSpent == 0
+        );
+
+      // HANYA ADMIN yang boleh mengubah saldo wallet.
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // TESTIMONIALS
+    // =========================================================
+
+    match /testimonials/{id} {
+
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == "pending"
+        && request.resource.data.verifiedPurchase == true;
+
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+        );
+
+      allow delete: if isAdmin();
+    }
+// =========================================================
+    // DEFAULT DENY
+    // =========================================================
+
+    match /maintenance_status/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
