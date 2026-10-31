@@ -1,5 +1,3 @@
-/* All calls go through our API server proxy to avoid CORS issues. The proxy now uses RonzzPay. */
-
 import { getSettings } from "./firestore";
 
 const API_BASE = "/api/payment/qris";

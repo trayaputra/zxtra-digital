@@ -108,7 +108,6 @@ export default function ProductDetail() {
         userName: userProfile.displayName || "",
         type: "product",
         amount: finalAmount,
-        originalAmount: price,
         method: "qris",
         paymentStatus: "pending",
         orderStatus: "pending_payment",
@@ -275,7 +274,8 @@ export default function ProductDetail() {
               </div>
             </div>
           )}
-<div className="flex items-end justify-between">
+
+          <div className="flex items-end justify-between">
             <div>
               {isReseller && currentVariant?.resellerPrice > 0 ? (
                 <>
