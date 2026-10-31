@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "nodeVersion": "22.x",
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  }
+}
